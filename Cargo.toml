@@ -1,0 +1,33 @@
+[package]
+name = "rshuffle"
+description = "A dead simple MPD shuffler written in pure Rust."
+authors = ["Campbell M. Cole <pslightjs@gmail.com>"]
+categories = [
+    "command-line-utilities",
+    "multimedia::audio",
+    "network-programming",
+]
+homepage = "https://github.com/campbellcole/rshuffle"
+repository = "https://github.com/campbellcole/rshuffle"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+edition = "2021"
+exclude = ["flake.nix", "flake.lock", ".envrc"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.4.6", features = ["derive"] }
+color-eyre = "0.6.2"
+dotenvy = "0.15.7"
+mpd = "0.1.0"
+rand = "0.8.5"
+tracing = "0.1.37"
+tracing-error = "0.2.0"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+mimalloc = "0.1.39"
+
+[profile.release]
+lto = true
+opt-level = "s"
+codegen-units = 1
