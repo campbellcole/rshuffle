@@ -14,7 +14,7 @@ rshuffle -H <host> -p <port>
 
 ## Tracing
 
-To enable tracing, set the `RUST_LOG` environment variable to `rshuffle=trace`.
+This project defaults to a `RUST_LOG` directive of `rshuffle=info`. This can be changed to `rshuffle=trace` to see more detailed logging, or to `rshuffle=off` to disable logging.
 
 # License
 
