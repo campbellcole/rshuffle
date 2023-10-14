@@ -15,7 +15,7 @@ use std::{
 use clap::Parser;
 use color_eyre::eyre::{eyre, Result};
 use mpd::{Client, Idle, Subsystem};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{rngs::ThreadRng, seq::SliceRandom, thread_rng};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
@@ -43,9 +43,10 @@ fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()
-                .with_target(true)
-                .with_file(false)
-                .with_line_number(true),
+                .with_target(false)
+                .with_file(true)
+                .with_line_number(true)
+                .compact(),
         )
         .with(
             EnvFilter::builder()
@@ -66,9 +67,10 @@ fn main() -> Result<()> {
     const ATTEMPT_INTERVAL: Duration = Duration::from_secs(10);
 
     let mut already_played = HashSet::<String>::new();
+    let mut rng = thread_rng();
 
     while attempts < 3 {
-        if let Err(err) = event_loop(&uri, &mut already_played) {
+        if let Err(err) = event_loop(&uri, &mut already_played, &mut rng) {
             error!("error in event loop: {}", err);
             if last_attempt_at.elapsed() > ATTEMPT_INTERVAL {
                 debug!("attempt interval elapsed, resetting attempt counter");
@@ -92,8 +94,8 @@ fn main() -> Result<()> {
 /// the main function will attempt to reconnect and restart it.
 ///
 /// If it fails to rerun this function 3 times, the program will exit.
-#[instrument(skip(already_played))]
-fn event_loop(uri: &str, already_played: &mut HashSet<String>) -> Result<()> {
+#[instrument(skip_all)]
+fn event_loop(uri: &str, already_played: &mut HashSet<String>, rng: &mut ThreadRng) -> Result<()> {
     trace!("connecting");
     let mut client = Client::connect(uri)?;
     info!("connected");
@@ -107,7 +109,7 @@ fn event_loop(uri: &str, already_played: &mut HashSet<String>) -> Result<()> {
 
         if active {
             trace!("queue empty, queuing next song");
-            queue_next(&mut client, already_played, status.queue_len)?;
+            queue_next(&mut client, already_played, status.queue_len, rng)?;
             info!("waiting for queue to finish...");
         }
 
@@ -121,11 +123,12 @@ fn event_loop(uri: &str, already_played: &mut HashSet<String>) -> Result<()> {
 ///
 /// Will only play songs which are not in the `already_played` set.
 /// If there are no more songs left, the `already_played` set will be cleared.
-#[instrument(skip(client, already_played))]
+#[instrument(skip_all)]
 fn queue_next(
     client: &mut Client,
     already_played: &mut HashSet<String>,
     queue_len: u32,
+    rng: &mut ThreadRng,
 ) -> Result<()> {
     // listall only returns the song paths which is all we care about
     let songs = client.listall()?;
@@ -150,11 +153,11 @@ fn queue_next(
     if songs.len() == 0 {
         warn!("no songs left to play, resetting");
         already_played.clear();
-        return queue_next(client, already_played, queue_len);
+        return queue_next(client, already_played, queue_len, rng);
     }
 
     let next = songs
-        .choose(&mut thread_rng())
+        .choose(rng)
         .ok_or_else(|| eyre!("no songs to choose from"))?;
 
     info!("playing {}", next.file);

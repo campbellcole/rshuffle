@@ -21,13 +21,10 @@
           nativeBuildInputs = [
             pkg-config
             clang
-            rust-analyzer
           ];
 
           buildInputs = [
-            (rust-bin.stable.latest.default.override {
-              extensions = [ "rust-src" ];
-            })
+            (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
           ];
 
           LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;

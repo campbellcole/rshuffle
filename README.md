@@ -14,7 +14,7 @@ rshuffle -H <host> -p <port>
 
 ## Tracing
 
-This project defaults to a `RUST_LOG` directive of `rshuffle=info`. This can be changed to `rshuffle=trace` to see more detailed logging, or to `rshuffle=off` to disable logging.
+This project defaults to a `RUST_LOG` directive of `rshuffle=info`. This can be changed to e.g. `rshuffle=trace` to see more detailed logging, or to `rshuffle=off` to disable logging. (See [`EnvFilter` Directives](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives))
 
 # License
 
