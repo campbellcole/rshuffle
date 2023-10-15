@@ -2,14 +2,43 @@
 
 A dead simple MPD shuffler written in Rust. Inspired by [ashuffle](https://github.com/joshkunz/ashuffle).
 
-This shuffler will keep track of which songs have been played and will not play them again until all songs have been played.
+This shuffler will keep track of which songs have been played and will not play them again until all songs have been played (can be disabled).
+It can also keep a buffer of songs in the queue to enable crossfading (disabled by default).
 
 # Usage
 
 ```sh
-rshuffle # connects to localhost on port 6600
-# or
-rshuffle -H <host> -p <port>
+$ rshuffle --help
+A dead simple MPD shuffler written in pure Rust.
+
+Usage: rshuffle [OPTIONS]
+
+Options:
+  -H, --host <HOST>
+          The hostname of the MPD server
+
+          [default: 0.0.0.0]
+
+  -p, --port <PORT>
+          The port of the MPD server
+
+          [default: 6600]
+
+  -b, --num-buffer <NUM_BUFFER>
+          The number of additional songs to keep in the playlist after the current song
+
+          This is required for crossfade to work.
+
+          [default: 0]
+
+  -n, --no-tracking
+          Don't keep track of which songs have been played
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
 ```
 
 ## Tracing

@@ -27,18 +27,33 @@ extern crate tracing;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
-pub struct Cli {
+struct Cli {
     #[clap(short = 'H', long, default_value = "0.0.0.0")]
+    /// The hostname of the MPD server
     pub host: String,
     #[clap(short, long, default_value_t = 6600)]
+    /// The port of the MPD server
     pub port: u16,
+    #[clap(short = 'b', long, default_value_t = 0)]
+    /// The number of additional songs to keep in the playlist after the current song
+    ///
+    /// This is required for crossfade to work.
+    pub num_buffer: u8,
+    /// Don't keep track of which songs have been played
+    #[clap(short, long)]
+    pub no_tracking: bool,
+}
+
+struct AppContext {
+    pub uri: String,
+    pub num_buffer: u8,
+    pub already_played: Option<HashSet<String>>,
+    pub rng: ThreadRng,
 }
 
 fn main() -> Result<()> {
     // parse args before initialization so we don't set up logging if we don't need to
     let cli = Cli::parse();
-
-    dotenvy::dotenv().ok();
 
     tracing_subscriber::registry()
         .with(
@@ -66,11 +81,22 @@ fn main() -> Result<()> {
     /// If an attempt lasted longer than this duration, assume the previous attempt was actually successful and reset the counter.
     const ATTEMPT_INTERVAL: Duration = Duration::from_secs(10);
 
-    let mut already_played = HashSet::<String>::new();
-    let mut rng = thread_rng();
+    let already_played = HashSet::<String>::new();
+    let rng = thread_rng();
+
+    let mut ctx = AppContext {
+        uri,
+        num_buffer: cli.num_buffer,
+        already_played: if cli.no_tracking {
+            None
+        } else {
+            Some(already_played)
+        },
+        rng,
+    };
 
     while attempts < 3 {
-        if let Err(err) = event_loop(&uri, &mut already_played, &mut rng) {
+        if let Err(err) = event_loop(&mut ctx) {
             error!("error in event loop: {}", err);
             if last_attempt_at.elapsed() > ATTEMPT_INTERVAL {
                 debug!("attempt interval elapsed, resetting attempt counter");
@@ -95,9 +121,9 @@ fn main() -> Result<()> {
 ///
 /// If it fails to rerun this function 3 times, the program will exit.
 #[instrument(skip_all)]
-fn event_loop(uri: &str, already_played: &mut HashSet<String>, rng: &mut ThreadRng) -> Result<()> {
+fn event_loop(ctx: &mut AppContext) -> Result<()> {
     trace!("connecting");
-    let mut client = Client::connect(uri)?;
+    let mut client = Client::connect(&ctx.uri)?;
     info!("connected");
 
     loop {
@@ -105,16 +131,89 @@ fn event_loop(uri: &str, already_played: &mut HashSet<String>, rng: &mut ThreadR
         let status = client.status()?;
         trace!("status: {:?}", status);
 
-        let active = status.nextsong.is_none() && status.song.is_none();
+        let active = is_active(ctx, &status);
+        trace!("activity status: {:?}", active);
 
-        if active {
-            trace!("queue empty, queuing next song");
-            queue_next(&mut client, already_played, status.queue_len, rng)?;
-            info!("waiting for queue to finish...");
+        match active {
+            ActivityStatus::NotActive => {
+                trace!("not active, doing nothing");
+            }
+            ActivityStatus::Active(n, play_first) => {
+                trace!("active, adding {} songs to queue", n);
+                let switch_to = if play_first {
+                    Some(status.queue_len)
+                } else {
+                    None
+                };
+                queue_next(&mut client, ctx, switch_to)?;
+
+                for _ in 0..n - 1 {
+                    queue_next(&mut client, ctx, None)?;
+                }
+            }
         }
 
         trace!("watching Queue and Player subsystems");
         client.wait(&[Subsystem::Queue, Subsystem::Player])?;
+    }
+}
+
+#[derive(Debug)]
+enum ActivityStatus {
+    /// We do not need to add anymore songs to the queue
+    NotActive,
+    /// We need to add N more songs to the queue. Second argument is whether or not we should play the first song.
+    Active(u32, bool),
+}
+
+#[inline]
+fn is_active(ctx: &mut AppContext, status: &mpd::Status) -> ActivityStatus {
+    if status.nextsong.is_none() && status.song.is_none() {
+        return ActivityStatus::Active(1 + ctx.num_buffer as u32, true);
+    } else if ctx.num_buffer != 0 {
+        // calculate how many songs remain after the current song in the queue
+        // the `queue_len` returned by MPD will keep growing if consume mode is off
+        // so we need to subtract the current song's position from the total length
+
+        // can't be zero because the first condition would have returned
+        let len = status.queue_len;
+
+        if let Some(current) = &status.song {
+            if ctx.num_buffer == 0 {
+                // there is a song playing and no buffer was requested so do nothing
+                return ActivityStatus::NotActive;
+            }
+
+            let current = current.pos;
+            // SAFETY: it should be impossible for the current song to be past the last song in the queue
+            // and since len > 0 we know that current <= len > 0
+            let remaining = len - current - 1;
+            if remaining == 0 {
+                // we are playing a song and it is the only song in the queue, and we know
+                // there are more songs to play because we would have returned if num_buffer == 0
+                return ActivityStatus::Active(ctx.num_buffer as u32, false);
+            } // else {
+              //     // chop off the currently playing song
+              //     // SAFETY: we know that remaining > 0 because we would have returned if it was 0
+              //     remaining -= 1;
+              // }
+
+            // if there are less songs remaining than the buffer size, we are active
+            if remaining < ctx.num_buffer as u32 {
+                ActivityStatus::Active(remaining, false)
+            } else {
+                // otherwise we are not active
+                ActivityStatus::NotActive
+            }
+        } else {
+            // this block is likely unreachable, but it is here for completeness
+            // this block will likely be caught because if status.song is None
+            // then status.nextsong will probably also be None, which the very first condition catches
+            ActivityStatus::Active(1 + ctx.num_buffer as u32, true)
+        }
+    } else {
+        // if there is no current song, and num_buffer is 0, we are not active
+        return ActivityStatus::NotActive;
     }
 }
 
@@ -123,37 +222,43 @@ fn event_loop(uri: &str, already_played: &mut HashSet<String>, rng: &mut ThreadR
 ///
 /// Will only play songs which are not in the `already_played` set.
 /// If there are no more songs left, the `already_played` set will be cleared.
+///
+/// If queue_len is Some(_), switch to that song
 #[instrument(skip_all)]
-fn queue_next(
-    client: &mut Client,
-    already_played: &mut HashSet<String>,
-    queue_len: u32,
-    rng: &mut ThreadRng,
-) -> Result<()> {
+fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>) -> Result<()> {
+    let AppContext {
+        uri: _,
+        num_buffer: _,
+        already_played,
+        rng,
+    } = ctx;
+
     // listall only returns the song paths which is all we care about
-    let songs = client.listall()?;
+    let mut songs = client.listall()?;
     trace!("received {} songs from MPD", songs.len());
 
     if songs.len() == 0 {
         return Err(eyre!("no songs in library"));
     }
 
-    let songs = songs
-        .into_iter()
-        .filter_map(|song| {
-            if !already_played.contains(&song.file) {
-                Some(song)
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
-    trace!("{} songs left to play", songs.len());
+    if let Some(already_played) = already_played {
+        songs = songs
+            .into_iter()
+            .filter_map(|song| {
+                if !already_played.contains(&song.file) {
+                    Some(song)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        trace!("{} songs left to play", songs.len());
 
-    if songs.len() == 0 {
-        warn!("no songs left to play, resetting");
-        already_played.clear();
-        return queue_next(client, already_played, queue_len, rng);
+        if songs.len() == 0 {
+            warn!("no songs left to play, resetting");
+            already_played.clear();
+            return queue_next(client, ctx, switch_to);
+        }
     }
 
     let next = songs
@@ -167,9 +272,14 @@ fn queue_next(
     // status was captured before we added the song
     // and queue is zero-indexed, so we can use the old
     // length as the new position
-    client.switch(queue_len)?;
+    if let Some(switch_to) = switch_to {
+        trace!("switching to song {}", switch_to);
+        client.switch(switch_to)?;
+    }
 
-    already_played.insert(next.file.clone());
+    if let Some(already_played) = already_played {
+        already_played.insert(next.file.clone());
+    }
 
     trace!("already played: {already_played:?}");
 

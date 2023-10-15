@@ -10,7 +10,7 @@ categories = [
 homepage = "https://github.com/campbellcole/rshuffle"
 repository = "https://github.com/campbellcole/rshuffle"
 license = "MIT OR Apache-2.0"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 exclude = ["flake.nix", "flake.lock", ".envrc"]
 rust-version = "1.70.0"
@@ -18,7 +18,6 @@ rust-version = "1.70.0"
 [dependencies]
 clap = { version = "4.4.6", features = ["derive"] }
 color-eyre = "0.6.2"
-dotenvy = "0.15.7"
 mpd = "0.1.0"
 rand = { version = "0.8.5", features = [
     "std",
