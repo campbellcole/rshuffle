@@ -12,7 +12,7 @@ repository = "https://github.com/campbellcole/rshuffle"
 license = "MIT OR Apache-2.0"
 version = "0.2.0"
 edition = "2021"
-exclude = ["flake.nix", "flake.lock", ".envrc"]
+exclude = ["flake.nix", "flake.lock", ".envrc", "rust-toolchain.toml"]
 rust-version = "1.70.0"
 
 [dependencies]
