@@ -41,9 +41,9 @@ Options:
           Print version
 ```
 
-## Tracing
+## Logging
 
-This project defaults to a `RUST_LOG` directive of `rshuffle=info`. This can be changed to e.g. `rshuffle=trace` to see more detailed logging, or to `rshuffle=off` to disable logging. (See [`EnvFilter` Directives](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives))
+This project defaults the `RUST_LOG` environment variable to `rshuffle=info`. This variable can be changed to e.g. `rshuffle=error` to only see errors, or to `rshuffle=off` to disable logging. (See [`EnvFilter` Directives](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives))
 
 ## MSRV
 
