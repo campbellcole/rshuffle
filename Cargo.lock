@@ -286,8 +286,7 @@ dependencies = [
 [[package]]
 name = "mpd"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e12cace5746cb0aa78faa6cd2caec9f9c01882fc0e6b54d34685a2d3303ea34"
+source = "git+https://github.com/campbellcole/rust-mpd?branch=main#157456cd9ebe5f7a5936ed18db73aada62666554"
 dependencies = [
  "bufstream",
 ]
@@ -435,7 +434,7 @@ checksum = "56d84fdd47036b038fc80dd333d10b6aab10d5d31f4a366e20014def75328d33"
 
 [[package]]
 name = "rshuffle"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "color-eyre",
