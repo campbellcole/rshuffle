@@ -38,7 +38,7 @@ struct Cli {
 
     /// The number of additional songs to keep in the playlist after the current song
     ///
-    /// This is required for crossfade to work.
+    /// This is required for crossfade to work
     #[clap(short = 'b', long, default_value_t = 0)]
     pub num_buffer: u8,
 
@@ -46,7 +46,7 @@ struct Cli {
     #[clap(short, long)]
     pub no_tracking: bool,
 
-    /// Only play songs which contain any of these strings in their titles
+    /// Only play songs which contain any of these strings in their titles. Can be specified multiple times
     #[clap(short, long)]
     pub filter: Vec<String>,
 }

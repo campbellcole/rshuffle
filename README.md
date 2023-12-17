@@ -43,12 +43,15 @@ Options:
   -b, --num-buffer <NUM_BUFFER>
           The number of additional songs to keep in the playlist after the current song
 
-          This is required for crossfade to work.
+          This is required for crossfade to work
 
           [default: 0]
 
   -n, --no-tracking
           Don't keep track of which songs have been played
+
+  -f, --filter <FILTER>
+          Only play songs which contain any of these strings in their titles. Can be specified multiple times
 
   -h, --help
           Print help (see a summary with '-h')
