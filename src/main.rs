@@ -14,6 +14,7 @@ use std::{
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Result};
+use filter::Filter;
 use mpd::{Client, Idle, Subsystem};
 use rand::{rngs::ThreadRng, seq::SliceRandom, thread_rng};
 use tracing_error::ErrorLayer;
@@ -24,6 +25,8 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[macro_use]
 extern crate tracing;
+
+mod filter;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -56,7 +59,7 @@ struct AppContext {
     pub num_buffer: u8,
     pub already_played: Option<HashSet<String>>,
     pub rng: ThreadRng,
-    pub filter: Vec<String>,
+    pub filters: Vec<Filter>,
 }
 
 fn main() -> Result<()> {
@@ -94,6 +97,19 @@ fn main() -> Result<()> {
     let already_played = HashSet::<String>::new();
     let rng = thread_rng();
 
+    let mut filters = Vec::<Filter>::new();
+
+    for filter in cli.filter {
+        match filter.parse() {
+            Ok(f) => filters.push(f),
+            Err(err) => {
+                error!("failed to parse filter \"{filter}\": {err:?}");
+            }
+        }
+    }
+
+    trace!("filters: {filters:?}");
+
     let mut ctx = AppContext {
         uri,
         num_buffer: cli.num_buffer,
@@ -103,11 +119,7 @@ fn main() -> Result<()> {
             Some(already_played)
         },
         rng,
-        filter: cli
-            .filter
-            .into_iter()
-            .map(|filter| filter.to_lowercase())
-            .collect(),
+        filters,
     };
 
     while attempts < 3 {
@@ -184,6 +196,7 @@ enum ActivityStatus {
 }
 
 #[inline]
+#[instrument(skip(ctx))]
 fn is_active(ctx: &mut AppContext, status: &mpd::Status) -> ActivityStatus {
     if status.nextsong.is_none() && status.song.is_none() {
         trace!("no next song and no current song");
@@ -196,23 +209,20 @@ fn is_active(ctx: &mut AppContext, status: &mpd::Status) -> ActivityStatus {
         // can't be zero because the first condition would have returned
         let len = status.queue_len;
 
-        let Some(current) = &status.nextsong else {
+        let Some(current) = &status.song else {
+            trace!("no next song, but there is a current song");
             // this block is likely unreachable, but it is here for completeness
             // this block will likely be caught because if status.song is None
             // then status.nextsong will probably also be None, which the very first condition catches
             return ActivityStatus::Active(1 + ctx.num_buffer as u32, true);
         };
 
-        if ctx.num_buffer == 0 {
-            // there is a song playing and no buffer was requested so do nothing
-            return ActivityStatus::NotActive;
-        }
-
         let current = current.pos;
         // SAFETY: it should be impossible for the current song to be past the last song in the queue
         // and since len > 0 we know that current <= len > 0
         let remaining = len - current - 1;
         if remaining == 0 {
+            trace!("no songs remaining in queue");
             // we are playing a song and it is the only song in the queue, and we know
             // there are more songs to play because we would have returned if num_buffer == 0
             return ActivityStatus::Active(ctx.num_buffer as u32, false);
@@ -220,13 +230,24 @@ fn is_active(ctx: &mut AppContext, status: &mpd::Status) -> ActivityStatus {
 
         // if there are less songs remaining than the buffer size, we are active
         if remaining < ctx.num_buffer as u32 {
+            trace!(
+                "{} songs remaining in queue, less than buffer size of {}",
+                remaining,
+                ctx.num_buffer
+            );
             ActivityStatus::Active(remaining, false)
         } else {
+            trace!(
+                "{} songs remaining in queue, more than or equal to the buffer size of {}",
+                remaining,
+                ctx.num_buffer
+            );
             // otherwise we are not active
             ActivityStatus::NotActive
         }
     } else {
-        // if there is no current song, and num_buffer is 0, we are not active
+        trace!("there is a song playing or up next and num_buffer is 0");
+        // there is either a current song or next song, and num_buffer is 0, so we are not active
         return ActivityStatus::NotActive;
     }
 }
@@ -245,11 +266,11 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
         num_buffer: _,
         already_played,
         rng,
-        filter,
+        filters,
     } = ctx;
 
     // listall only returns the song paths which isn't enough information if we want to filter
-    let mut songs = if filter.is_empty() {
+    let mut songs = if filters.is_empty() {
         client.listall()
     } else {
         client.listallinfo()
@@ -260,18 +281,12 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
         return Err(eyre!("no songs in library"));
     }
 
-    if !filter.is_empty() {
+    if !filters.is_empty() {
         songs = songs
             .into_iter()
-            .filter(|song| {
-                filter.iter().any(|filter| {
-                    song.title
-                        .as_ref()
-                        .is_some_and(|title| title.to_lowercase().contains(filter))
-                })
-            })
+            .filter(|song| filters.iter().any(|filter| filter.matches(song)))
             .collect::<Vec<_>>();
-        trace!("{} songs left after filtering", songs.len());
+        debug!("{} songs left after filtering", songs.len());
 
         if songs.is_empty() {
             // this is an error because we haven't filtered out already played tracks
@@ -291,7 +306,7 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
                 }
             })
             .collect::<Vec<_>>();
-        trace!("{} songs left to play", songs.len());
+        info!("{} songs left to play", songs.len());
 
         if songs.is_empty() {
             warn!("no songs left to play, resetting");
