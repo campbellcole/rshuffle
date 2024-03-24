@@ -7,16 +7,14 @@
 //! You can continue queueing songs as normal and this program will not add anything
 //! until the queue is completely empty and there is nothing left to play.
 
-use std::{
-    collections::HashSet,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Result};
 use filter::Filter;
 use mpd::{Client, Idle, Subsystem};
 use rand::{rngs::ThreadRng, seq::SliceRandom, thread_rng};
+use state::AppState;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
@@ -27,6 +25,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 extern crate tracing;
 
 mod filter;
+mod state;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -36,7 +35,7 @@ struct Cli {
     pub host: String,
 
     /// The port of the MPD server
-    #[clap(short, long, default_value_t = 6600)]
+    #[clap(short = 'P', long, default_value_t = 6600)]
     pub port: u16,
 
     /// The number of additional songs to keep in the playlist after the current song
@@ -49,6 +48,13 @@ struct Cli {
     #[clap(short, long)]
     pub no_tracking: bool,
 
+    /// Persist the state of the program across restarts
+    ///
+    /// This is useful if you have a massive music library and you want to listen to each song once
+    /// over the course of a few days instead of in one sitting.
+    #[clap(short, long)]
+    pub persist: bool,
+
     /// Only play songs which contain any of these strings in their titles. Can be specified multiple times
     #[clap(short, long)]
     pub filter: Vec<String>,
@@ -57,7 +63,7 @@ struct Cli {
 struct AppContext {
     pub uri: String,
     pub num_buffer: u8,
-    pub already_played: Option<HashSet<String>>,
+    pub state: Option<AppState>,
     pub rng: ThreadRng,
     pub filters: Vec<Filter>,
     // we want inverted filters to be separate because they are applied after the normal filters
@@ -96,7 +102,6 @@ fn main() -> Result<()> {
     /// If an attempt lasted longer than this duration, assume the previous attempt was actually successful and reset the counter.
     const ATTEMPT_INTERVAL: Duration = Duration::from_secs(30);
 
-    let already_played = HashSet::<String>::new();
     let rng = thread_rng();
 
     let mut filters = Vec::<Filter>::new();
@@ -118,10 +123,10 @@ fn main() -> Result<()> {
     let mut ctx = AppContext {
         uri,
         num_buffer: cli.num_buffer,
-        already_played: if cli.no_tracking {
+        state: if cli.no_tracking {
             None
         } else {
-            Some(already_played)
+            Some(AppState::load(cli.persist)?)
         },
         rng,
         filters,
@@ -270,7 +275,7 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
     let AppContext {
         uri: _,
         num_buffer: _,
-        already_played,
+        state,
         rng,
         filters,
         inverted_filters,
@@ -316,14 +321,14 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
         }
     }
 
-    if let Some(already_played) = already_played {
+    if let Some(state) = state {
         songs = songs
             .into_iter()
             .filter_map(|song| {
-                if !already_played.contains(&song.file) {
-                    Some(song)
-                } else {
+                if state.has_been_played(&song) {
                     None
+                } else {
+                    Some(song)
                 }
             })
             .collect::<Vec<_>>();
@@ -331,7 +336,7 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
 
         if songs.is_empty() {
             warn!("no songs left to play, resetting");
-            already_played.clear();
+            state.clear();
             return queue_next(client, ctx, switch_to);
         }
     }
@@ -352,11 +357,12 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
         client.switch(switch_to)?;
     }
 
-    if let Some(already_played) = already_played {
-        already_played.insert(next.file.clone());
-    }
+    if let Some(state) = state {
+        state.mark_as_played(next);
+        state.save()?;
 
-    trace!("already played: {already_played:?}");
+        trace!("state: {state:?}");
+    }
 
     Ok(())
 }
