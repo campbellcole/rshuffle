@@ -60,6 +60,8 @@ struct AppContext {
     pub already_played: Option<HashSet<String>>,
     pub rng: ThreadRng,
     pub filters: Vec<Filter>,
+    // we want inverted filters to be separate because they are applied after the normal filters
+    pub inverted_filters: Vec<Filter>,
 }
 
 fn main() -> Result<()> {
@@ -110,6 +112,9 @@ fn main() -> Result<()> {
 
     trace!("filters: {filters:?}");
 
+    let (inverted_filters, filters) = filters.into_iter().partition(Filter::is_inverted);
+    trace!("inverted filters: {inverted_filters:?}");
+
     let mut ctx = AppContext {
         uri,
         num_buffer: cli.num_buffer,
@@ -120,6 +125,7 @@ fn main() -> Result<()> {
         },
         rng,
         filters,
+        inverted_filters,
     };
 
     while attempts < 3 {
@@ -267,10 +273,11 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
         already_played,
         rng,
         filters,
+        inverted_filters,
     } = ctx;
 
     // listall only returns the song paths which isn't enough information if we want to filter
-    let mut songs = if filters.is_empty() {
+    let mut songs = if filters.is_empty() && inverted_filters.is_empty() {
         client.listall()
     } else {
         client.listallinfo()
@@ -292,6 +299,20 @@ fn queue_next(client: &mut Client, ctx: &mut AppContext, switch_to: Option<u32>)
             // this is an error because we haven't filtered out already played tracks
             // which means the filters match nothing and probably never will
             return Err(eyre!("no songs left after filtering"));
+        }
+    }
+
+    if !inverted_filters.is_empty() {
+        songs = songs
+            .into_iter()
+            .filter(|song| inverted_filters.iter().all(|filter| !filter.matches(song)))
+            .collect::<Vec<_>>();
+        debug!("{} songs left after inverted filtering", songs.len());
+
+        if songs.is_empty() {
+            // this is an error because we haven't filtered out already played tracks
+            // which means the filters match nothing and probably never will
+            return Err(eyre!("no songs left after inverted filtering"));
         }
     }
 

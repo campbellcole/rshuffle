@@ -34,31 +34,51 @@ impl FromStr for FilterField {
 pub struct Filter {
     field: FilterField,
     value: String,
+    invert: bool,
 }
 
 impl FromStr for Filter {
     type Err = FilterError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(mut s: &str) -> Result<Self, Self::Err> {
         if !s.contains(':') {
+            let mut invert = false;
+
+            if s.starts_with('!') {
+                s = &s[1..];
+                invert = true;
+            }
+
             return Ok(Filter {
                 field: FilterField::Any,
                 value: s.to_string(),
+                invert,
             });
         }
 
         let mut parts = s.splitn(2, ':');
-        let field = parts.next().ok_or(FilterError::InvalidField)?;
+        let mut field = parts.next().ok_or(FilterError::InvalidField)?;
         let value = parts.next().ok_or(FilterError::InvalidValue)?;
+
+        let mut inverted = false;
+        if field.starts_with('!') {
+            inverted = true;
+            field = &field[1..];
+        }
 
         Ok(Filter {
             field: FilterField::from_str(field)?,
             value: value.to_string(),
+            invert: inverted,
         })
     }
 }
 
 impl Filter {
+    pub fn is_inverted(&self) -> bool {
+        self.invert
+    }
+
     pub fn matches(&self, song: &Song) -> bool {
         let to_compare = match self.field {
             FilterField::Title => song.title.as_ref(),
@@ -82,6 +102,7 @@ impl Filter {
         Self {
             field,
             value: self.value.clone(),
+            invert: self.invert,
         }
     }
 }
