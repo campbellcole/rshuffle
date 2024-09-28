@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use mpd::Song;
+use mpd_client::responses::Song;
 
 #[derive(Debug, Clone, Copy)]
 pub enum FilterField {
@@ -81,13 +81,17 @@ impl Filter {
 
     pub fn matches(&self, song: &Song) -> bool {
         let to_compare = match self.field {
-            FilterField::Title => song.title.as_ref(),
-            FilterField::Artist => song.artist.as_ref(),
-            FilterField::Album => song
-                .tags
-                .iter()
-                .find(|t| t.0.to_lowercase() == "album")
-                .map(|t| &t.1),
+            FilterField::Title => song.title(),
+            FilterField::Artist => {
+                let artists = song.artists();
+
+                if artists.is_empty() {
+                    None
+                } else {
+                    Some(artists[0].as_str())
+                }
+            }
+            FilterField::Album => song.album(),
             FilterField::Any => {
                 return self.as_field(FilterField::Title).matches(song)
                     || self.as_field(FilterField::Artist).matches(song)

@@ -21,6 +21,7 @@
           nativeBuildInputs = [
             pkg-config
             clang
+            cargo-msrv
           ];
 
           buildInputs = [

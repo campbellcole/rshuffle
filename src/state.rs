@@ -1,7 +1,7 @@
-use std::{collections::HashSet, fs::File, path::PathBuf};
+use std::{collections::HashSet, path::PathBuf};
 
 use color_eyre::eyre::{Context, OptionExt, Result};
-use mpd::Song;
+use mpd_client::responses::Song;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -22,7 +22,7 @@ impl AppState {
         Ok(path)
     }
 
-    pub fn load(persist: bool) -> Result<Self> {
+    pub async fn load(persist: bool) -> Result<Self> {
         let path = Self::path()?;
 
         if !persist || !path.exists() {
@@ -34,17 +34,19 @@ impl AppState {
             return Ok(state);
         }
 
-        let reader = File::open(path).wrap_err("failed to open state file for reading")?;
+        let state = tokio::fs::read_to_string(path)
+            .await
+            .wrap_err("failed to open state file for reading")?;
 
         let mut state: Self =
-            serde_json::from_reader(reader).wrap_err("failed to deserialize app state")?;
+            serde_json::from_str(&state).wrap_err("failed to deserialize app state")?;
 
         state.persist = persist;
 
         Ok(state)
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub async fn save(&self) -> Result<()> {
         if !self.persist {
             return Ok(());
         }
@@ -52,23 +54,26 @@ impl AppState {
         let path = Self::path()?;
 
         if !path.exists() {
-            std::fs::create_dir_all(path.parent().unwrap())
+            tokio::fs::create_dir_all(path.parent().unwrap())
+                .await
                 .wrap_err("failed to create state directory")?;
         }
 
-        let writer = File::create(path).wrap_err("failed to open state file for writing")?;
+        let state = serde_json::to_string(self).wrap_err("failed to serialize app state")?;
 
-        serde_json::to_writer(writer, self).wrap_err("failed to serialize app state")?;
+        tokio::fs::write(path, state)
+            .await
+            .wrap_err("failed to write state")?;
 
         Ok(())
     }
 
     pub fn has_been_played(&self, song: &Song) -> bool {
-        self.already_played.contains(&song.file)
+        self.already_played.contains(&song.url)
     }
 
     pub fn mark_as_played(&mut self, song: &Song) {
-        self.already_played.insert(song.file.clone());
+        self.already_played.insert(song.url.clone());
     }
 
     pub fn clear(&mut self) {

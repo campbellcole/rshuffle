@@ -5,23 +5,23 @@ A dead simple MPD shuffler written in Rust. Inspired by [ashuffle](https://githu
 This shuffler will keep track of which songs have been played and will not play them again until all songs have been played (can be disabled).
 It can also keep a buffer of songs in the queue to enable crossfading (disabled by default).
 
-# Installation
+## Installation
 
-## Using Cargo
-
-```sh
-$ cargo install rshuffle
-```
-
-## From source
+### Using Cargo
 
 ```sh
-$ git clone https://github.com/campbellcole/rshuffle.git
-$ cd rshuffle
-$ cargo install --path .
+cargo install rshuffle
 ```
 
-# Usage
+### From source
+
+```sh
+git clone https://github.com/campbellcole/rshuffle.git
+cd rshuffle
+cargo install --path .
+```
+
+## Usage
 
 ```sh
 $ rshuffle --help
@@ -66,14 +66,14 @@ This project defaults the `RUST_LOG` environment variable to `rshuffle=info`. Th
 
 ## MSRV
 
-The minimum supported Rust version for this crate is 1.70.0.
+The minimum supported Rust version for this crate is 1.74.1.
 
-#### Policy
+### Policy
 
 **`0.x.y`:** MSRV can only change when the **minor** version is incremented (e.g. `0.1.0 -> 0.2.0`)
 <br />
 **`x.y.z`:** MSRV can only change when the **major** version is incremented (e.g. `1.0.0 -> 2.0.0`)
 
-# License
+## License
 
 This project is dual-licensed under the MIT and Apache 2.0 licenses. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE) for details.

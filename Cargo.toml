@@ -10,15 +10,22 @@ categories = [
 homepage = "https://github.com/campbellcole/rshuffle"
 repository = "https://github.com/campbellcole/rshuffle"
 license = "MIT OR Apache-2.0"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 exclude = ["flake.nix", "flake.lock", ".envrc", "rust-toolchain.toml"]
-rust-version = "1.70.0"
+rust-version = "1.74.1"
 
 [dependencies]
+tokio = { version = "1.40.0", features = [
+    "net",
+    "time",
+    "sync",
+    "macros",
+    "rt-multi-thread",
+    "fs",
+] }
 clap = { version = "4.4.6", features = ["derive"] }
 color-eyre = "0.6.2"
-mpd = { git = "https://github.com/campbellcole/rust-mpd", branch = "main" }
 rand = { version = "0.8.5", features = [
     "std",
     "std_rng",
@@ -30,10 +37,11 @@ mimalloc = "0.1.39"
 dirs = "5.0.1"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
+mpd_client = "1.4.1"
+async-recursion = "1.1.1"
 
 [features]
 default = []
-nightly = ["rand/nightly"]
 
 [profile.release]
 lto = true
