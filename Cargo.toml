@@ -7,6 +7,7 @@ categories = [
     "multimedia::audio",
     "network-programming",
 ]
+keywords = ["mpd", "shuffler"]
 homepage = "https://github.com/campbellcole/rshuffle"
 repository = "https://github.com/campbellcole/rshuffle"
 license = "MIT OR Apache-2.0"
