@@ -32,23 +32,28 @@ Usage: rshuffle [OPTIONS]
 Options:
   -H, --host <HOST>
           The hostname of the MPD server
-
+          
           [default: 0.0.0.0]
 
-  -p, --port <PORT>
+  -P, --port <PORT>
           The port of the MPD server
-
+          
           [default: 6600]
 
   -b, --num-buffer <NUM_BUFFER>
           The number of additional songs to keep in the playlist after the current song
-
+          
           This is required for crossfade to work
-
+          
           [default: 0]
 
   -n, --no-tracking
           Don't keep track of which songs have been played
+
+  -p, --persist
+          Persist the state of the program across restarts
+          
+          This is useful if you have a massive music library and you want to listen to each song once over the course of a few days instead of in one sitting.
 
   -f, --filter <FILTER>
           Only play songs which contain any of these strings in their titles. Can be specified multiple times
