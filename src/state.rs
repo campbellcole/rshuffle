@@ -1,15 +1,26 @@
-use std::{collections::HashSet, path::PathBuf};
+use std::{collections::HashSet, fmt::Debug, path::PathBuf};
 
 use color_eyre::eyre::{Context, OptionExt, Result};
 use mpd_client::responses::Song;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppState {
     #[serde(skip)]
     persist: bool,
     already_played: HashSet<String>,
+}
+
+impl Debug for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // print state normally except print a length of the already_played HashSet instead of the
+        // contents
+        f.debug_struct("AppState")
+            .field("persist", &self.persist)
+            .field("already_played", &self.already_played.len())
+            .finish()
+    }
 }
 
 impl AppState {
@@ -46,7 +57,7 @@ impl AppState {
         Ok(state)
     }
 
-    pub async fn save(&self) -> Result<()> {
+    async fn save(&self) -> Result<()> {
         if !self.persist {
             return Ok(());
         }
@@ -72,11 +83,15 @@ impl AppState {
         self.already_played.contains(&song.url)
     }
 
-    pub fn mark_as_played(&mut self, song: &Song) {
+    pub async fn mark_as_played(&mut self, song: &Song) -> Result<()> {
         self.already_played.insert(song.url.clone());
+
+        self.save().await
     }
 
-    pub fn clear(&mut self) {
+    pub async fn clear(&mut self) -> Result<()> {
         self.already_played.clear();
+
+        self.save().await
     }
 }

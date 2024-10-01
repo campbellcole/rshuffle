@@ -21,13 +21,30 @@ cd rshuffle
 cargo install --path .
 ```
 
+## Basic Usage
+
+When I use this program I generally run the following command:
+
+```sh
+rshuffle -p -b 1
+#        ^^ ^^^^ keep a buffer of 1 song after the current song to enable crossfade
+#        |
+#         \ persist the already played songs to a file
+```
+
+This will make sure that crossfade works and that the tracking of already played songs survives restarts.
+
 ## Usage
 
 ```sh
 $ rshuffle --help
-A dead simple MPD shuffler written in pure Rust.
+A dead simple MPD shuffler
 
-Usage: rshuffle [OPTIONS]
+Usage: rshuffle [OPTIONS] [COMMAND]
+
+Commands:
+  completions  Generate shell completions for the provided shell
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
   -H, --host <HOST>

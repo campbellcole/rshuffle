@@ -170,6 +170,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_complete"
+version = "4.5.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8937760c3f4c60871870b8c3ee5f9b30771f792a7045c48bcbba999d7d6b3b8e"
+dependencies = [
+ "clap",
+]
+
+[[package]]
+name = "clap_complete_command"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da8e198c052315686d36371e8a3c5778b7852fc75cc313e4e11eeb7a644a1b62"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "clap_complete_nushell",
+]
+
+[[package]]
+name = "clap_complete_nushell"
+version = "4.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fe32110e006bccf720f8c9af3fee1ba7db290c724eab61544e1d3295be3a40e"
+dependencies = [
+ "clap",
+ "clap_complete",
+]
+
+[[package]]
 name = "clap_derive"
 version = "4.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -585,10 +615,11 @@ checksum = "7a66a03ae7c801facd77a29370b4faec201768915ac14a721ba36f20bc9c209b"
 
 [[package]]
 name = "rshuffle"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "async-recursion",
  "clap",
+ "clap_complete_command",
  "color-eyre",
  "dirs",
  "mimalloc",

@@ -1,6 +1,6 @@
 [package]
 name = "rshuffle"
-description = "A dead simple MPD shuffler written in pure Rust."
+description = "A dead simple MPD shuffler"
 authors = ["Campbell M. Cole <pslightjs@gmail.com>"]
 categories = [
     "command-line-utilities",
@@ -11,7 +11,7 @@ keywords = ["mpd", "shuffler"]
 homepage = "https://github.com/campbellcole/rshuffle"
 repository = "https://github.com/campbellcole/rshuffle"
 license = "MIT OR Apache-2.0"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 exclude = ["flake.nix", "flake.lock", ".envrc", "rust-toolchain.toml"]
 rust-version = "1.74.1"
@@ -40,6 +40,7 @@ serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 mpd_client = "1.4.1"
 async-recursion = "1.1.1"
+clap_complete_command = "0.6.1"
 
 [features]
 default = []

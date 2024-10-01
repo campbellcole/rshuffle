@@ -1,4 +1,4 @@
-//! A dead simple MPD shuffler written in pure Rust.
+//! A dead simple MPD shuffler
 //!
 //! This program keeps track of the songs it has already played and will not play them again until
 //! every song in your MPD database has been played.
@@ -7,16 +7,21 @@
 //! queueing songs as normal and this program will not add anything until the queue is completely
 //! empty and there is nothing left to play.
 
-use std::time::{Duration, Instant};
+use std::{
+    fmt::{self, Display},
+    time::{Duration, Instant},
+};
 
 use async_recursion::async_recursion;
-use clap::Parser;
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete_command::Shell;
 use color_eyre::eyre::{bail, eyre, Result};
 use filter::Filter;
 use mpd_client::{
     client::{ConnectionEvent, Subsystem},
     commands::{self as cmd, SongPosition},
-    responses as res, Client,
+    responses::{self as res, Song},
+    Client,
 };
 use rand::{rngs::ThreadRng, seq::SliceRandom, thread_rng};
 use state::AppState;
@@ -65,6 +70,19 @@ struct Cli {
     /// multiple times
     #[clap(short, long)]
     pub filter: Vec<String>,
+
+    /// Subcommands
+    #[clap(subcommand)]
+    pub cmd: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    /// Generate shell completions for the provided shell
+    Completions {
+        #[clap(value_enum)]
+        shell: Shell,
+    },
 }
 
 struct AppContext {
@@ -81,6 +99,11 @@ struct AppContext {
 async fn main() -> Result<()> {
     // parse args before initialization so we don't set up logging if we don't need to
     let cli = Cli::parse();
+
+    if let Some(Command::Completions { shell }) = cli.cmd {
+        shell.generate(&mut Cli::command(), &mut std::io::stdout());
+        return Ok(());
+    }
 
     tracing_subscriber::registry()
         .with(
@@ -250,8 +273,8 @@ fn is_active(ctx: &mut AppContext, status: &res::Status) -> ActivityStatus {
         let Some((current, _)) = &status.current_song else {
             trace!("no current song, but there is a next song");
             // this block is likely unreachable, but it is here for completeness. this block will
-            // likely be caught because if status.song is None then status.nextsong will probably
-            // also be None, which the very first condition catches
+            // likely be caught because if status.current_song is None then status.next_song will
+            // probably also be None, which the very first condition catches
             return ActivityStatus::Active(1 + ctx.num_buffer, true);
         };
 
@@ -287,6 +310,33 @@ fn is_active(ctx: &mut AppContext, status: &res::Status) -> ActivityStatus {
         trace!("there is a song playing or up next and num_buffer is 0");
         // there is either a current song or next song, and num_buffer is 0, so we are not active
         return ActivityStatus::NotActive;
+    }
+}
+
+struct DisplaySong<'a> {
+    song: &'a Song,
+}
+
+impl Display for DisplaySong<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let artist = self.song.artists().first();
+        let title = self.song.title();
+
+        match (artist, title) {
+            (Some(a), Some(t)) => write!(f, "{} - {}", a, t),
+            (None, Some(t)) => write!(f, "{}", t),
+            _ => write!(f, "{}", self.song.url),
+        }
+    }
+}
+
+trait SongExt {
+    fn display(&self) -> DisplaySong;
+}
+
+impl SongExt for Song {
+    fn display(&self) -> DisplaySong {
+        DisplaySong { song: self }
     }
 }
 
@@ -352,19 +402,13 @@ async fn queue_next(
     if let Some(state) = state {
         songs = songs
             .into_iter()
-            .filter_map(|song| {
-                if state.has_been_played(&song) {
-                    None
-                } else {
-                    Some(song)
-                }
-            })
+            .filter(|song| !state.has_been_played(song))
             .collect::<Vec<_>>();
         info!("{} songs left to play", songs.len());
 
         if songs.is_empty() {
             warn!("no songs left to play, resetting");
-            state.clear();
+            state.clear().await?;
             return queue_next(client, ctx, switch_to).await;
         }
     }
@@ -373,7 +417,7 @@ async fn queue_next(
         .choose(rng)
         .ok_or_else(|| eyre!("no songs to choose from"))?;
 
-    info!("playing {}", next.url);
+    info!("playing {}", next.display());
 
     client.command(cmd::Add::uri(&next.url)).await?;
 
@@ -387,8 +431,7 @@ async fn queue_next(
     }
 
     if let Some(state) = state {
-        state.mark_as_played(next);
-        state.save().await?;
+        state.mark_as_played(next).await?;
 
         trace!("state: {state:?}");
     }
